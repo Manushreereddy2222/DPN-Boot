@@ -1,0 +1,4 @@
+firmware/.pio/
+__pycache__/
+*.pyc
+dpn_test_results.csv

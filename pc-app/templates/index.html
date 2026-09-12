@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DPN Sensitivity Map</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --accent: #58a6ff;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    letter-spacing: -0.3px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 36px;
+  }
+
+  .layout {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .foot-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  svg circle {
+    stroke: var(--bg);
+    stroke-width: 3;
+    cursor: pointer;
+    transition: r 0.15s ease, filter 0.15s ease;
+  }
+
+  svg circle:hover {
+    filter: brightness(1.15);
+    r: 24;
+  }
+
+  text.label {
+    font-size: 11px;
+    fill: var(--muted);
+    text-anchor: middle;
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+    justify-content: center;
+    margin-top: 18px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 260px;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 18px;
+  }
+
+  .card h3 {
+    margin: 0 0 6px 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .card .grams {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+
+  .card .meta {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-top: 4px;
+  }
+
+  .empty-state {
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 40px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Foot Sole Sensitivity Map</h1>
+  <div class="subtitle">Live threshold readout — updates every few seconds</div>
+
+  <div class="layout">
+    <div class="foot-panel">
+      <svg width="220" height="440" viewBox="0 0 300 500">
+        <ellipse cx="150" cy="270" rx="90" ry="220" fill="#21262d" stroke="var(--border)" stroke-width="2" />
+        <circle id="zone0" cx="150" cy="70" r="20" fill="#484f58" />
+        <text class="label" x="150" y="30">Big Toe</text>
+
+        <circle id="zone1" cx="105" cy="135" r="20" fill="#484f58" />
+        <text class="label" x="90" y="100">Zone 1</text>
+
+        <circle id="zone2" cx="195" cy="135" r="20" fill="#484f58" />
+        <text class="label" x="210" y="100">Zone 2</text>
+
+        <circle id="zone3" cx="150" cy="420" r="26" fill="#484f58" />
+        <text class="label" x="150" y="465">Heel</text>
+      </svg>
+
+      <div class="legend">
+        <span><span class="dot" style="background: var(--green)"></span> Normal</span>
+        <span><span class="dot" style="background: var(--orange)"></span> Reduced</span>
+        <span><span class="dot" style="background: var(--red)"></span> Low sensitivity</span>
+      </div>
+    </div>
+
+    <div class="cards" id="cards">
+      <div class="empty-state">Waiting for data...</div>
+    </div>
+  </div>
+
+<script>
+  const zoneNames = { 0: "Big Toe", 1: "Zone 1 (Ball)", 2: "Zone 2 (Ball)", 3: "Heel" };
+
+  function colorFor(grams) {
+    if (grams < 10) return getComputedStyle(document.documentElement).getPropertyValue('--green');
+    if (grams < 25) return getComputedStyle(document.documentElement).getPropertyValue('--orange');
+    return getComputedStyle(document.documentElement).getPropertyValue('--red');
+  }
+
+  async function loadData() {
+    const res = await fetch("/api/thresholds");
+    const data = await res.json();
+    const cardsContainer = document.getElementById("cards");
+
+    if (Object.keys(data).length === 0) {
+      cardsContainer.innerHTML = '<div class="empty-state">Waiting for data...</div>';
+      return;
+    }
+
+    let cardsHtml = "";
+    for (let i = 0; i < 4; i++) {
+      const zone = data[i];
+      const circle = document.getElementById("zone" + i);
+      if (zone) {
+        const color = colorFor(zone.fsr_threshold_grams);
+        circle.setAttribute("fill", color);
+
+        cardsHtml += `
+          <div class="card" style="border-left-color: ${color}">
+            <h3>${zoneNames[i]}</h3>
+            <div class="grams">${zone.fsr_threshold_grams}g</div>
+            <div class="meta">Intensity threshold: ${zone.intensity_threshold}</div>
+          </div>`;
+      }
+    }
+    cardsContainer.innerHTML = cardsHtml;
+  }
+
+  loadData();
+  setInterval(loadData, 3000);
+</script>
+</body>
+</html>
