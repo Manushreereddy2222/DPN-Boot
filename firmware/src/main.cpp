@@ -1,42 +1,258 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_PWMServoDriver.h>
-#include "BluetoothSerial.h"
 
-BluetoothSerial SerialBT;
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
+// ===================== LINKED LIST =====================
+struct TrialNode {
+  int intensity;
+  int fsrRaw;
+  bool felt;
+  TrialNode* next;
 
-// ---------- CONFIG ----------
-#define BUTTON_PIN 23
-#define POWER_BUTTON_PIN 27
-#define NUM_ZONES 4
-#define POKE_DURATION 200
-#define RESPONSE_TIMEOUT 3000
-#define DEBOUNCE_DELAY 30
-#define STEP_SIZE 20
-#define MIN_INTENSITY 0     // TODO: real motor's minimum spin PWM
+  TrialNode(int i, int f, bool fe) : intensity(i), fsrRaw(f), felt(fe), next(nullptr) {}
+};
+
+class TrialList {
+private:
+  TrialNode* head;
+  int count;
+
+public:
+  TrialList() : head(nullptr), count(0) {}
+
+  void append(int intensity, int fsrRaw, bool felt) {
+    TrialNode* node = new TrialNode(intensity, fsrRaw, felt);
+    if (!head) {
+      head = node;
+    } else {
+      TrialNode* curr = head;
+      while (curr->next) curr = curr->next;
+      curr->next = node;
+    }
+    count++;
+  }
+
+  int size() { return count; }
+  TrialNode* getHead() { return head; }
+
+  int sumIntensity(TrialNode* node) {
+    if (!node) return 0;
+    return node->intensity + sumIntensity(node->next);
+  }
+
+  int sumFSR(TrialNode* node) {
+    if (!node) return 0;
+    return node->fsrRaw + sumFSR(node->next);
+  }
+
+  float avgIntensity() {
+    if (count == 0) return 0;
+    return sumIntensity(head) / (float)count;
+  }
+
+  float avgFSR() {
+    if (count == 0) return 0;
+    return sumFSR(head) / (float)count;
+  }
+
+  ~TrialList() {
+    TrialNode* curr = head;
+    while (curr) {
+      TrialNode* tmp = curr;
+      curr = curr->next;
+      delete tmp;
+    }
+  }
+};
+
+// ===================== BASE CLASS (Inheritance) =====================
+class HardwareComponent {
+protected:
+  int pin;
+  String name;
+
+public:
+  HardwareComponent(int p, String n) : pin(p), name(n) {}
+  virtual void init() = 0;
+  int getPin() { return pin; }
+  String getName() { return name; }
+};
+
+// ===================== SENSOR (Inherits HardwareComponent) =====================
+class FSRSensor : public HardwareComponent {
+private:
+  static const int CAL_POINTS = 5;
+  int calRaw[CAL_POINTS]     = {0,   300,  600,  1400, 2800};
+  float calGrams[CAL_POINTS] = {0.0, 5.0,  10.0, 20.0, 50.0};
+
+  float interpolate(int raw, int index) {
+    if (index >= CAL_POINTS - 1) return calGrams[CAL_POINTS - 1];
+    if (raw >= calRaw[index] && raw <= calRaw[index + 1]) {
+      float ratio = (float)(raw - calRaw[index]) / (calRaw[index + 1] - calRaw[index]);
+      return calGrams[index] + ratio * (calGrams[index + 1] - calGrams[index]);
+    }
+    return interpolate(raw, index + 1);
+  }
+
+public:
+  FSRSensor(int p, String n) : HardwareComponent(p, n) {}
+
+  void init() override {
+    pinMode(pin, INPUT);
+  }
+
+  int readRaw() {
+    return analogRead(pin);
+  }
+
+  float rawToGrams(int raw) {
+    if (raw <= calRaw[0]) return calGrams[0];
+    if (raw >= calRaw[CAL_POINTS - 1]) return calGrams[CAL_POINTS - 1];
+    return interpolate(raw, 0);
+  }
+};
+
+// ===================== MOTOR (Inherits HardwareComponent) =====================
+class MotorActuator : public HardwareComponent {
+public:
+  MotorActuator(int p, String n) : HardwareComponent(p, n) {}
+
+  void init() override {
+    pinMode(pin, OUTPUT);
+    analogWrite(pin, 0);
+  }
+
+  void setIntensity(int intensity) {
+    analogWrite(pin, intensity);
+  }
+
+  void stop() {
+    analogWrite(pin, 0);
+  }
+};
+
+// ===================== ZONE CLASS =====================
+#define STEP_SIZE 40
+#define MIN_INTENSITY 0
 #define MAX_INTENSITY 255
-#define REVERSALS_NEEDED 6
-#define LONG_PRESS_DURATION 3000
+#define REVERSALS_NEEDED 3
+#define START_INTENSITY 128
 
-struct Zone {
-  int motorChannel;   // PCA9685 channel, 0-3 (not a GPIO pin anymore)
-  int fsrPin;
-  bool lastResult;
+class Zone {
+private:
+  int id;
+  FSRSensor* sensor;
+  MotorActuator* motor;
   int intensity;
   int lastDirection;
   int reversalCount;
-  int reversalHistory[6];
-  int reversalFSR[6];
   bool active;
+  TrialList reversals;
+
+public:
+  Zone() : id(0), sensor(nullptr), motor(nullptr), intensity(START_INTENSITY),
+           lastDirection(0), reversalCount(0), active(true) {}
+
+  void configure(int zoneId, FSRSensor* s, MotorActuator* m) {
+    id = zoneId;
+    sensor = s;
+    motor = m;
+  }
+
+  bool isActive() { return active; }
+  int getId() { return id; }
+  int getIntensity() { return intensity; }
+  FSRSensor* getSensor() { return sensor; }
+  MotorActuator* getMotor() { return motor; }
+
+  void fire() {
+    motor->setIntensity(intensity);
+  }
+
+  void stopMotor() {
+    motor->stop();
+  }
+
+  void processResult(bool felt, int fsrRaw) {
+    int currentDirection = felt ? -1 : 1;
+
+    if (lastDirection != 0 && currentDirection != lastDirection && reversalCount < REVERSALS_NEEDED) {
+      reversals.append(intensity, fsrRaw, felt);
+      reversalCount++;
+      if (reversalCount >= REVERSALS_NEEDED) {
+        active = false;
+      }
+    }
+    lastDirection = currentDirection;
+
+    if (felt) intensity -= STEP_SIZE;
+    else intensity += STEP_SIZE;
+    if (intensity < MIN_INTENSITY) intensity = MIN_INTENSITY;
+    if (intensity > MAX_INTENSITY) intensity = MAX_INTENSITY;
+  }
+
+  int getReversalCount() { return reversalCount; }
+
+  float getThresholdIntensity() {
+    return reversals.avgIntensity();
+  }
+
+  float getThresholdFSRRaw() {
+    return reversals.avgFSR();
+  }
 };
 
-Zone zones[NUM_ZONES] = {
-  {0, 34, false, 200, 0, 0, {0,0,0,0,0,0}, {0,0,0,0,0,0}, true},
-  {1, 35, false, 200, 0, 0, {0,0,0,0,0,0}, {0,0,0,0,0,0}, true},
-  {2, 36, false, 200, 0, 0, {0,0,0,0,0,0}, {0,0,0,0,0,0}, true},
-  {3, 39, false, 200, 0, 0, {0,0,0,0,0,0}, {0,0,0,0,0,0}, true}
+// ===================== BUTTON CLASS =====================
+class Button : public HardwareComponent {
+private:
+  bool lastState;
+  unsigned long lastDebounce;
+  unsigned long debounceDelay;
+
+public:
+  Button(int p, String n, unsigned long deb = 30)
+    : HardwareComponent(p, n), lastState(HIGH), lastDebounce(0), debounceDelay(deb) {}
+
+  void init() override {
+    pinMode(pin, INPUT_PULLUP);
+  }
+
+  bool pressed() {
+    bool reading = digitalRead(pin);
+    if (reading != lastState) lastDebounce = millis();
+    bool result = false;
+    if ((millis() - lastDebounce) > debounceDelay) {
+      if (reading == LOW && lastState == HIGH) {
+        result = true;
+      }
+    }
+    lastState = reading;
+    return result;
+  }
+
+  bool isHeld(unsigned long duration) {
+    return (digitalRead(pin) == LOW) && (millis() - lastDebounce > duration);
+  }
 };
+
+// ===================== GLOBALS =====================
+#define NUM_ZONES 4
+#define POKE_DURATION 200
+#define RESPONSE_TIMEOUT 1500
+#define INTER_TRIAL_DELAY 500
+#define LONG_PRESS_DURATION 3000
+
+FSRSensor sensors[NUM_ZONES] = {
+  FSRSensor(34, "FSR_0"), FSRSensor(35, "FSR_1"),
+  FSRSensor(36, "FSR_2"), FSRSensor(39, "FSR_3")
+};
+
+MotorActuator motors[NUM_ZONES] = {
+  MotorActuator(4, "Motor_0"), MotorActuator(5, "Motor_1"),
+  MotorActuator(18, "Motor_2"), MotorActuator(19, "Motor_3")
+};
+
+Zone zones[NUM_ZONES];
+Button responseBtn(23, "Response");
+Button powerBtn(27, "Power");
 
 enum TestState { IDLE, FIRE, WAIT_RESPONSE, LOG_RESULT, TEST_COMPLETE };
 TestState currentState = IDLE;
@@ -46,92 +262,85 @@ int lastZone = -1;
 unsigned long stateStartTime = 0;
 unsigned long responseTimestamp = 0;
 bool responseReceived = false;
-
-bool lastButtonState = HIGH;
-unsigned long lastDebounceTime = 0;
-
 bool systemOn = true;
-unsigned long powerButtonPressStart = 0;
-bool powerButtonHandled = false;
+unsigned long powerPressStart = 0;
+bool powerHandled = false;
+int trialCount = 0;
 
-// ---------- FSR CALIBRATION (placeholder — replace after Phase 4) ----------
-const int CAL_POINTS = 5;
-int calRaw[CAL_POINTS]     = {0,   300,  600,  1400, 2800};
-float calGrams[CAL_POINTS] = {0,   5,    10,   20,   50};
-
-float rawToGrams(int raw) {
-  if (raw <= calRaw[0]) return calGrams[0];
-  if (raw >= calRaw[CAL_POINTS - 1]) return calGrams[CAL_POINTS - 1];
-  for (int i = 0; i < CAL_POINTS - 1; i++) {
-    if (raw >= calRaw[i] && raw <= calRaw[i + 1]) {
-      float ratio = (float)(raw - calRaw[i]) / (calRaw[i + 1] - calRaw[i]);
-      return calGrams[i] + ratio * (calGrams[i + 1] - calGrams[i]);
-    }
-  }
-  return 0;
-}
-
-// Sets a motor's intensity via PCA9685 (0-255 input, converted to 12-bit)
-void setMotor(int channel, int intensity) {
-  int duty = map(intensity, 0, 255, 0, 4095);
-  pwm.setPWM(channel, 0, duty);
-}
-
-void checkPowerButton() {
-  bool reading = digitalRead(POWER_BUTTON_PIN);
+void checkPower() {
+  bool reading = digitalRead(27);
   if (reading == LOW) {
-    if (powerButtonPressStart == 0) {
-      powerButtonPressStart = millis();
-    } else if (!powerButtonHandled && (millis() - powerButtonPressStart > LONG_PRESS_DURATION)) {
+    if (powerPressStart == 0) powerPressStart = millis();
+    else if (!powerHandled && (millis() - powerPressStart > LONG_PRESS_DURATION)) {
       systemOn = !systemOn;
-      powerButtonHandled = true;
-      String msg = systemOn ? "SYSTEM ON" : "SYSTEM OFF";
-      Serial.println(msg);
-      SerialBT.println(msg);
+      powerHandled = true;
+      Serial.println(systemOn ? "SYSTEM ON" : "SYSTEM OFF");
     }
   } else {
-    powerButtonPressStart = 0;
-    powerButtonHandled = false;
+    powerPressStart = 0;
+    powerHandled = false;
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  SerialBT.begin("DPN_Boot");
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(POWER_BUTTON_PIN, INPUT_PULLUP);
 
-  Wire.begin();          // default ESP32 I2C pins: SDA=21, SCL=22
-  pwm.begin();
-  pwm.setPWMFreq(1000);  // 1kHz — avoids audible motor whine
+  for (int i = 0; i < NUM_ZONES; i++) {
+    sensors[i].init();
+    motors[i].init();
+    zones[i].configure(i, &sensors[i], &motors[i]);
+  }
+  responseBtn.init();
+  powerBtn.init();
 
   randomSeed(analogRead(0));
+  Serial.println("=== DPN Boot Sensitivity Test ===");
+  Serial.println("Press GREEN button when you feel the stimulus.");
+  Serial.println("Potentiometers simulate FSR pressure sensors.");
+  Serial.println("----------------------------------");
 }
 
 void loop() {
-  checkPowerButton();
+  checkPower();
   if (!systemOn) return;
 
   switch (currentState) {
 
     case IDLE: {
       bool anyActive = false;
-      for (int i = 0; i < NUM_ZONES; i++) if (zones[i].active) anyActive = true;
+      for (int i = 0; i < NUM_ZONES; i++) if (zones[i].isActive()) anyActive = true;
       if (!anyActive) { currentState = TEST_COMPLETE; break; }
 
       int newZone;
+      int attempts = 0;
       do {
         newZone = random(0, NUM_ZONES);
-      } while (newZone == lastZone || !zones[newZone].active);
+        attempts++;
+        if (attempts > 20) break;
+      } while ((newZone == lastZone || !zones[newZone].isActive()) && attempts <= 20);
+
+      if (!zones[newZone].isActive()) {
+        for (int i = 0; i < NUM_ZONES; i++) {
+          if (zones[i].isActive()) { newZone = i; break; }
+        }
+      }
 
       currentZone = newZone;
       lastZone = newZone;
+      trialCount++;
+      Serial.println();
+      Serial.print(">>> Trial ");
+      Serial.print(trialCount);
+      Serial.print(" | Testing Zone ");
+      Serial.print(currentZone);
+      Serial.print(" at intensity ");
+      Serial.println(zones[currentZone].getIntensity());
       currentState = FIRE;
       break;
     }
 
     case FIRE: {
-      setMotor(zones[currentZone].motorChannel, zones[currentZone].intensity);
+      zones[currentZone].fire();
       stateStartTime = millis();
       responseReceived = false;
       currentState = WAIT_RESPONSE;
@@ -140,84 +349,67 @@ void loop() {
 
     case WAIT_RESPONSE: {
       if (millis() - stateStartTime > POKE_DURATION) {
-        setMotor(zones[currentZone].motorChannel, 0);
+        zones[currentZone].stopMotor();
       }
 
-      bool reading = digitalRead(BUTTON_PIN);
-      if (reading != lastButtonState) lastDebounceTime = millis();
-
-      if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
-        if (reading == LOW && !responseReceived) {
-          responseReceived = true;
-          responseTimestamp = millis();
-          lastButtonState = reading;
-          currentState = LOG_RESULT;
-          break;
-        }
+      if (responseBtn.pressed() && !responseReceived) {
+        responseReceived = true;
+        responseTimestamp = millis();
+        currentState = LOG_RESULT;
+        break;
       }
-      lastButtonState = reading;
 
       if (millis() - stateStartTime > RESPONSE_TIMEOUT) currentState = LOG_RESULT;
       break;
     }
 
     case LOG_RESULT: {
-      int fsrValue = analogRead(zones[currentZone].fsrPin);
-      float fsrGrams = rawToGrams(fsrValue);
+      FSRSensor* sensor = zones[currentZone].getSensor();
+      int fsrValue = sensor->readRaw();
+      float fsrGrams = sensor->rawToGrams(fsrValue);
       unsigned long reactionTime = responseReceived ? (responseTimestamp - stateStartTime) : 0;
-      zones[currentZone].lastResult = responseReceived;
 
-      int currentDirection = responseReceived ? -1 : 1;
-      if (zones[currentZone].lastDirection != 0 &&
-          currentDirection != zones[currentZone].lastDirection &&
-          zones[currentZone].reversalCount < REVERSALS_NEEDED) {
-        zones[currentZone].reversalHistory[zones[currentZone].reversalCount] = zones[currentZone].intensity;
-        zones[currentZone].reversalFSR[zones[currentZone].reversalCount] = fsrValue;
-        zones[currentZone].reversalCount++;
-        if (zones[currentZone].reversalCount >= REVERSALS_NEEDED) zones[currentZone].active = false;
+      zones[currentZone].processResult(responseReceived, fsrValue);
+
+      if (!zones[currentZone].isActive()) {
+        Serial.print("    *** Zone ");
+        Serial.print(currentZone);
+        Serial.println(" COMPLETE ***");
       }
-      zones[currentZone].lastDirection = currentDirection;
-
-      if (responseReceived) zones[currentZone].intensity -= STEP_SIZE;
-      else zones[currentZone].intensity += STEP_SIZE;
-      if (zones[currentZone].intensity < MIN_INTENSITY) zones[currentZone].intensity = MIN_INTENSITY;
-      if (zones[currentZone].intensity > MAX_INTENSITY) zones[currentZone].intensity = MAX_INTENSITY;
 
       String line = "Zone: " + String(currentZone) +
                     " | Felt: " + (responseReceived ? "YES" : "NO") +
-                    " | Intensity: " + String(zones[currentZone].intensity) +
-                    " | Reversals: " + String(zones[currentZone].reversalCount) +
+                    " | Intensity: " + String(zones[currentZone].getIntensity()) +
+                    " | Reversals: " + String(zones[currentZone].getReversalCount()) + "/" + String(REVERSALS_NEEDED) +
                     " | FSR raw: " + String(fsrValue) +
                     " | FSR grams: " + String(fsrGrams, 1) +
                     " | Reaction time (ms): " + String(reactionTime);
       Serial.println(line);
-      SerialBT.println(line);
 
-      delay(1000);
+      delay(INTER_TRIAL_DELAY);
       currentState = IDLE;
       break;
     }
 
     case TEST_COMPLETE: {
-      String header = "\n--- TEST COMPLETE ---";
-      Serial.println(header);
-      SerialBT.println(header);
+      Serial.println();
+      Serial.println("====================================");
+      Serial.println("       TEST COMPLETE — RESULTS      ");
+      Serial.println("====================================");
 
       for (int i = 0; i < NUM_ZONES; i++) {
-        int sum = 0, fsrSum = 0;
-        for (int r = 0; r < REVERSALS_NEEDED; r++) {
-          sum += zones[i].reversalHistory[r];
-          fsrSum += zones[i].reversalFSR[r];
-        }
-        float threshold = sum / (float)REVERSALS_NEEDED;
-        float fsrGramsThreshold = rawToGrams((int)(fsrSum / (float)REVERSALS_NEEDED));
+        float threshold = zones[i].getThresholdIntensity();
+        float fsrAvgRaw = zones[i].getThresholdFSRRaw();
+        float fsrGramsThreshold = sensors[i].rawToGrams((int)fsrAvgRaw);
 
         String result = "Zone " + String(i) +
                         " | Intensity threshold: " + String(threshold, 1) +
                         " | FSR threshold: " + String(fsrGramsThreshold, 1) + "g";
         Serial.println(result);
-        SerialBT.println(result);
       }
+
+      Serial.println("====================================");
+      Serial.println("Test ended. Reset ESP32 to re-run.");
 
       while (true) delay(1000);
       break;
