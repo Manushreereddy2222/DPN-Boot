@@ -285,7 +285,7 @@
   }
 
   async function loadData() {
-    const res = await fetch("/api/thresholds");
+    const res = await fetch("../latest_thresholds.json");
     const data = await res.json();
     const cardsContainer = document.getElementById("cards");
     const summary = document.getElementById("summary");
