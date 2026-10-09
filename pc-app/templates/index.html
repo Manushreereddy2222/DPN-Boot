@@ -49,6 +49,8 @@
     align-items: flex-start;
     flex-wrap: wrap;
     justify-content: center;
+    max-width: 1100px;
+    width: 100%;
   }
 
   .foot-panel {
@@ -98,11 +100,13 @@
     display: inline-block;
   }
 
-  .cards {
+  .right-panel {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    min-width: 260px;
+    gap: 16px;
+    min-width: 320px;
+    flex: 1;
+    max-width: 500px;
   }
 
   .card {
@@ -110,24 +114,114 @@
     border: 1px solid var(--border);
     border-left: 4px solid var(--accent);
     border-radius: 10px;
-    padding: 14px 18px;
+    padding: 16px 20px;
   }
 
-  .card h3 {
-    margin: 0 0 6px 0;
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .card-header h3 {
+    margin: 0;
     font-size: 0.95rem;
     font-weight: 600;
   }
 
-  .card .grams {
-    font-size: 1.4rem;
+  .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat {
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .stat-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
     font-weight: 700;
   }
 
-  .card .meta {
+  .stat-value.large {
+    font-size: 1.4rem;
+  }
+
+  .trial-bar {
+    display: flex;
+    gap: 3px;
+    margin-top: 10px;
+  }
+
+  .trial-pip {
+    width: 8px;
+    height: 16px;
+    border-radius: 2px;
+  }
+
+  .trial-section-label {
+    font-size: 0.7rem;
     color: var(--muted);
-    font-size: 0.78rem;
-    margin-top: 4px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+  }
+
+  .summary-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin-top: 32px;
+    max-width: 1100px;
+    width: 100%;
+  }
+
+  .summary-panel h2 {
+    font-size: 1.1rem;
+    margin: 0 0 16px 0;
+    font-weight: 600;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .summary-stat {
+    text-align: center;
+    padding: 12px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+  }
+
+  .summary-stat .stat-value {
+    font-size: 1.6rem;
   }
 
   .empty-state {
@@ -140,8 +234,8 @@
 </head>
 <body>
 
-  <h1>Foot Sole Sensitivity Map</h1>
-  <div class="subtitle">Live threshold readout — updates every few seconds</div>
+  <h1>DPN Boot — Foot Sole Sensitivity Map</h1>
+  <div class="subtitle">Threshold readout from staircase method test</div>
 
   <div class="layout">
     <div class="foot-panel">
@@ -161,53 +255,133 @@
       </svg>
 
       <div class="legend">
-        <span><span class="dot" style="background: var(--green)"></span> Normal</span>
-        <span><span class="dot" style="background: var(--orange)"></span> Reduced</span>
-        <span><span class="dot" style="background: var(--red)"></span> Low sensitivity</span>
+        <span><span class="dot" style="background: var(--green)"></span> Normal (&lt;10g)</span>
+        <span><span class="dot" style="background: var(--orange)"></span> Reduced (10-25g)</span>
+        <span><span class="dot" style="background: var(--red)"></span> Low (&gt;25g)</span>
       </div>
     </div>
 
-    <div class="cards" id="cards">
+    <div class="right-panel" id="cards">
       <div class="empty-state">Waiting for data...</div>
     </div>
   </div>
 
+  <div class="summary-panel" id="summary" style="display:none;">
+    <h2>Test Summary</h2>
+    <div class="summary-grid" id="summary-grid"></div>
+  </div>
+
 <script>
-  const zoneNames = { 0: "Big Toe", 1: "Zone 1 (Ball)", 2: "Zone 2 (Ball)", 3: "Heel" };
+  const zoneNames = { 0: "Big Toe (Zone 0)", 1: "Ball Left (Zone 1)", 2: "Ball Right (Zone 2)", 3: "Heel (Zone 3)" };
 
   function colorFor(grams) {
-    if (grams < 10) return getComputedStyle(document.documentElement).getPropertyValue('--green');
-    if (grams < 25) return getComputedStyle(document.documentElement).getPropertyValue('--orange');
-    return getComputedStyle(document.documentElement).getPropertyValue('--red');
+    if (grams < 10) return "green";
+    if (grams < 25) return "orange";
+    return "red";
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim();
   }
 
   async function loadData() {
     const res = await fetch("/api/thresholds");
     const data = await res.json();
     const cardsContainer = document.getElementById("cards");
+    const summary = document.getElementById("summary");
+    const summaryGrid = document.getElementById("summary-grid");
 
     if (Object.keys(data).length === 0) {
       cardsContainer.innerHTML = '<div class="empty-state">Waiting for data...</div>';
+      summary.style.display = "none";
       return;
     }
 
     let cardsHtml = "";
+    let totalTrials = 0;
+    let totalFelt = 0;
+    let allReactionTimes = [];
+    let worstZone = { name: "", grams: 0 };
+
     for (let i = 0; i < 4; i++) {
-      const zone = data[i];
+      const zone = data[i] || data[String(i)];
       const circle = document.getElementById("zone" + i);
       if (zone) {
-        const color = colorFor(zone.fsr_threshold_grams);
-        circle.setAttribute("fill", color);
+        const level = colorFor(zone.fsr_threshold_grams);
+        circle.setAttribute("fill", cssVar(level));
+
+        const badgeClass = "badge-" + level;
+        const levelLabel = zone.sensitivity_level || (level === "green" ? "Normal" : level === "orange" ? "Reduced" : "Low");
+
+        totalTrials += zone.total_trials || 0;
+        totalFelt += zone.felt_count || 0;
+        if (zone.avg_reaction_time_ms) allReactionTimes.push(zone.avg_reaction_time_ms);
+        if (zone.fsr_threshold_grams > worstZone.grams) {
+          worstZone = { name: zoneNames[i], grams: zone.fsr_threshold_grams };
+        }
+
+        let trialBar = "";
+        if (zone.trials && zone.trials.length > 0) {
+          trialBar = '<div class="trial-section-label">Trial history (green = felt, red = missed)</div><div class="trial-bar">';
+          zone.trials.forEach(t => {
+            const c = t.felt === "YES" ? cssVar("green") : cssVar("red");
+            trialBar += '<div class="trial-pip" style="background:' + c + '"></div>';
+          });
+          trialBar += '</div>';
+        }
 
         cardsHtml += `
-          <div class="card" style="border-left-color: ${color}">
-            <h3>${zoneNames[i]}</h3>
-            <div class="grams">${zone.fsr_threshold_grams}g</div>
-            <div class="meta">Intensity threshold: ${zone.intensity_threshold}</div>
+          <div class="card" style="border-left-color: ${cssVar(level)}">
+            <div class="card-header">
+              <h3>${zoneNames[i]}</h3>
+              <span class="badge ${badgeClass}">${levelLabel}</span>
+            </div>
+            <div class="stats-grid">
+              <div class="stat">
+                <div class="stat-label">FSR Threshold</div>
+                <div class="stat-value large">${zone.fsr_threshold_grams}g</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Intensity Threshold</div>
+                <div class="stat-value large">${zone.intensity_threshold}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Avg Reaction Time</div>
+                <div class="stat-value">${zone.avg_reaction_time_ms || '—'}ms</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Trials (Felt / Missed)</div>
+                <div class="stat-value">${zone.felt_count || 0} / ${zone.missed_count || 0}</div>
+              </div>
+            </div>
+            ${trialBar}
           </div>`;
       }
     }
     cardsContainer.innerHTML = cardsHtml;
+
+    const avgRT = allReactionTimes.length > 0
+      ? (allReactionTimes.reduce((a, b) => a + b, 0) / allReactionTimes.length).toFixed(0)
+      : "—";
+
+    summaryGrid.innerHTML = `
+      <div class="summary-stat">
+        <div class="stat-label">Total Trials</div>
+        <div class="stat-value">${totalTrials}</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-label">Overall Felt Rate</div>
+        <div class="stat-value">${totalTrials > 0 ? Math.round(totalFelt / totalTrials * 100) : 0}%</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-label">Avg Reaction Time</div>
+        <div class="stat-value">${avgRT}ms</div>
+      </div>
+      <div class="summary-stat">
+        <div class="stat-label">Worst Zone</div>
+        <div class="stat-value" style="font-size:1rem">${worstZone.name}<br>${worstZone.grams}g</div>
+      </div>`;
+    summary.style.display = "block";
   }
 
   loadData();
