@@ -14,7 +14,7 @@ threshold_pattern = re.compile(
 )
 
 trial_pattern = re.compile(
-    r"Zone: (\d+) \| Felt: (YES|NO) \| Intensity: (\d+) \| Reversals: (\d+)/\d+ "
+    r"Zone: (\d+) \| Felt: (YES|NO) \| Intensity: (\d+) \| Reversals: (\d+)(?:/\d+)? "
     r"\| FSR raw: (\d+) \| FSR grams: ([\d.]+) \| Reaction time \(ms\): (\d+)"
 )
 

@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>DPN Sensitivity Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPN Boot Dashboard</title>
+<link rel="icon" href="data:,">
 <style>
   :root {
     --bg: #0d1117;
@@ -13,10 +15,15 @@
     --green: #3fb950;
     --orange: #d29922;
     --red: #f85149;
-    --accent: #58a6ff;
+    --felt: #58a6ff;
+    --missed: #8b949e;
+    --active: #a371f7;
+    --sole: #21262d;
+    --btn: #1f6feb;
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
 
   body {
     margin: 0;
@@ -24,368 +31,838 @@
     background: var(--bg);
     color: var(--text);
     font-family: 'Segoe UI', system-ui, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 40px 20px;
+    padding: 0 20px 48px;
   }
 
-  h1 {
-    font-size: 1.6rem;
-    font-weight: 600;
-    margin-bottom: 4px;
-    letter-spacing: -0.3px;
-  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
 
-  .subtitle {
-    color: var(--muted);
-    font-size: 0.9rem;
-    margin-bottom: 36px;
-  }
-
-  .layout {
-    display: flex;
-    gap: 48px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    justify-content: center;
-    max-width: 1100px;
-    width: 100%;
-  }
-
-  .foot-panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 24px;
-  }
-
-  svg circle {
-    stroke: var(--bg);
-    stroke-width: 3;
-    cursor: pointer;
-    transition: r 0.15s ease, filter 0.15s ease;
-  }
-
-  svg circle:hover {
-    filter: brightness(1.15);
-    r: 24;
-  }
-
-  text.label {
-    font-size: 11px;
-    fill: var(--muted);
-    text-anchor: middle;
-  }
-
-  .legend {
-    display: flex;
-    gap: 18px;
-    justify-content: center;
-    margin-top: 18px;
-    font-size: 0.8rem;
-    color: var(--muted);
-  }
-
-  .legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-
-  .right-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    min-width: 320px;
-    flex: 1;
-    max-width: 500px;
-  }
-
-  .card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--accent);
-    border-radius: 10px;
-    padding: 16px 20px;
-  }
-
-  .card-header {
+  .topbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 24px 0 8px;
+  }
+  .topbar h1 { font-size: 1.5rem; font-weight: 600; margin: 0; letter-spacing: -0.3px; }
+  .topbar .sub { color: var(--muted); font-size: 0.85rem; }
+
+  .tabs { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+  .tab {
+    background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600;
+    padding: 8px 22px; border-radius: 7px; cursor: pointer;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--btn); color: #fff; }
+
+  .btn {
+    font: inherit; font-weight: 600; color: var(--text); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 18px; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.primary { background: var(--btn); border-color: var(--btn); color: #fff; }
+  .btn.danger { background: rgba(248,81,73,0.15); border-color: var(--red); color: var(--red); }
+  .btn.ghost { background: none; color: var(--muted); }
+
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 28px;
+    align-items: start;
+    margin-top: 20px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .left-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .right-col { position: sticky; top: 16px; }
+  @media (max-width: 900px) { .right-col { position: static; order: -1; } }
+
+  /* ---------- foot panel ---------- */
+  .foot-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px 20px; }
+  .foot-top { display: flex; justify-content: flex-start; margin-bottom: 8px; }
+  .footSel {
+    font: inherit; font-weight: 600; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  }
+  .foot-canvas svg { display: block; width: 100%; max-width: 240px; margin: 0 auto; }
+  .zone-dot { stroke: var(--bg); stroke-width: 3; transition: fill 0.3s ease; }
+  .zone-dot.active { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { stroke: var(--active); stroke-width: 3; }
+    50% { stroke: var(--active); stroke-width: 10; stroke-opacity: 0.35; }
+  }
+  .foot-label { font-size: 14px; fill: var(--muted); text-anchor: middle; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: center;
+    margin-top: 14px; font-size: 0.95rem; color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+  /* ---------- trial markings ---------- */
+  .pips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 24px; border-radius: 5px; font-size: 0.8rem; font-weight: 700; line-height: 1;
+  }
+  .pip.felt { background: rgba(88,166,255,0.18); border: 1px solid var(--felt); color: var(--felt); }
+  .pip.missed { background: transparent; border: 1px dashed var(--missed); color: var(--missed); }
+  .pip-legend { display: inline-flex; align-items: center; gap: 7px; }
+  .pip-legend .pip { width: 18px; height: 20px; }
+
+  /* ---------- control tab ---------- */
+  .conn-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 16px; }
+  .pill {
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted);
+  }
+  .pill.ok { color: var(--green); border-color: var(--green); background: rgba(63,185,80,0.1); }
+  .switch { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.9rem; cursor: pointer; }
+  .warn { color: var(--orange); font-size: 0.85rem; }
+
+  .btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn-felt {
+    width: 100%; margin-top: 12px; padding: 18px; font-size: 1.15rem; border-radius: 12px;
+    background: rgba(88,166,255,0.15); border: 2px solid var(--felt); color: var(--felt);
+    font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .btn-felt:hover:not(:disabled) { background: rgba(88,166,255,0.3); }
+  .btn-felt:active:not(:disabled) { transform: scale(0.99); }
+  .btn-felt:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+  @media (max-width: 600px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+  .tile-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .tile-value { font-size: 1.05rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-RUNNING { color: var(--green); }
+  .st-STOPPED { color: var(--orange); }
+  .st-COMPLETE { color: var(--felt); }
+
+  .timer { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; margin-top: 12px; overflow: hidden; }
+  .timer > div { height: 100%; width: 0; background: var(--active); }
+  .timer-label { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
+
+  .zp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (max-width: 600px) { .zp-grid { grid-template-columns: 1fr; } }
+  .zp { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .zp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .zp-head h4 { margin: 0; font-size: 0.9rem; }
+  .segs { display: flex; gap: 3px; margin-bottom: 8px; }
+  .segs i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); }
+  .segs i.on { background: var(--active); }
+  .zp-meta { font-size: 0.78rem; color: var(--muted); margin-bottom: 8px; }
+  .zp-meta b { color: var(--text); font-weight: 600; }
+
+  .log-panel { padding: 0; overflow: hidden; }
+  .log-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9rem; }
+  .log {
+    height: 240px; overflow-y: auto; padding: 10px 16px; margin: 0;
+    font-family: Consolas, 'Courier New', monospace; font-size: 0.78rem; line-height: 1.55; background: #0a0e13;
+  }
+  .log:empty::before { content: 'Waiting for device...'; color: var(--muted); }
+  .ln { white-space: pre-wrap; word-break: break-word; }
+  .ln.tx { color: var(--green); }
+  .ln.fire { color: var(--active); }
+  .ln.status { color: var(--orange); }
+  .ln.err { color: var(--red); }
+  .ln.result { color: var(--felt); }
+
+  .banner {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    border: 1px solid var(--felt); background: rgba(88,166,255,0.1); border-radius: 10px; padding: 12px 16px;
   }
 
-  .card-header h3 {
-    margin: 0;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
+  /* ---------- results tab ---------- */
+  .results-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+  .results-head h2 { margin: 0 0 4px; font-size: 1.2rem; }
+  .source { font-size: 0.82rem; color: var(--muted); }
+  .results-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-  .badge {
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
+  .card { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 10px; padding: 16px 20px; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .card-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
 
+  .badge { font-size: 0.7rem; font-weight: 700; padding: 2px 9px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid transparent; }
   .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
   .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-active { background: rgba(163,113,247,0.18); color: var(--active); }
+  .badge-muted { color: var(--muted); border-color: var(--border); }
+  .badge-done { color: var(--text); border-color: var(--muted); }
 
-  .stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat { background: rgba(255,255,255,0.03); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+  .stat-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .stat-value { font-size: 1.1rem; font-weight: 700; }
+  .stat-value.large { font-size: 1.4rem; }
 
-  .stat {
-    background: rgba(255,255,255,0.03);
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
+  .summary-panel { margin-top: 28px; }
+  .summary-panel h2 { font-size: 1.1rem; margin: 0 0 14px; font-weight: 600; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .summary-stat { text-align: center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; }
+  .summary-stat .stat-value { font-size: 1.6rem; }
 
-  .stat-label {
-    font-size: 0.7rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
-  }
-
-  .stat-value {
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-
-  .stat-value.large {
-    font-size: 1.4rem;
-  }
-
-  .trial-bar {
-    display: flex;
-    gap: 3px;
-    margin-top: 10px;
-  }
-
-  .trial-pip {
-    width: 8px;
-    height: 16px;
-    border-radius: 2px;
-  }
-
-  .trial-section-label {
-    font-size: 0.7rem;
-    color: var(--muted);
-    margin-top: 10px;
-    margin-bottom: 4px;
-  }
-
-  .summary-panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px 24px;
-    margin-top: 32px;
-    max-width: 1100px;
-    width: 100%;
-  }
-
-  .summary-panel h2 {
-    font-size: 1.1rem;
-    margin: 0 0 16px 0;
-    font-weight: 600;
-  }
-
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-  }
-
-  .summary-stat {
-    text-align: center;
-    padding: 12px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 10px;
-  }
-
-  .summary-stat .stat-value {
-    font-size: 1.6rem;
-  }
-
-  .empty-state {
-    color: var(--muted);
-    font-size: 0.9rem;
-    text-align: center;
-    padding: 40px;
-  }
+  .empty-state { color: var(--muted); font-size: 0.9rem; text-align: center; padding: 40px; }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-  <h1>DPN Boot — Foot Sole Sensitivity Map</h1>
-  <div class="subtitle">Threshold readout from staircase method test</div>
+  <div class="topbar">
+    <div>
+      <h1>DPN Boot</h1>
+      <div class="sub">Foot sole sensitivity test &middot; staircase method</div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" role="tab" data-tab="control">Control</button>
+      <button class="tab" role="tab" data-tab="results">Results</button>
+    </div>
+  </div>
 
-  <div class="layout">
-    <div class="foot-panel">
-      <svg width="220" height="440" viewBox="0 0 300 500">
-        <ellipse cx="150" cy="270" rx="90" ry="220" fill="#21262d" stroke="var(--border)" stroke-width="2" />
-        <circle id="zone0" cx="150" cy="70" r="20" fill="#484f58" />
-        <text class="label" x="150" y="30">Big Toe</text>
+  <!-- ===================== CONTROL TAB ===================== -->
+  <section id="tab-control">
+    <div class="conn-bar">
+      <button class="btn primary" id="btnConnect">Connect to ESP32</button>
+      <span class="pill" id="connPill">Disconnected</span>
+      <label class="switch"><input type="checkbox" id="demoToggle"> Demo mode (simulated device)</label>
+      <label class="switch" id="autoWrap" hidden><input type="checkbox" id="autoRespond" checked> Auto-respond as patient</label>
+      <span class="warn" id="browserWarn" hidden>Web Serial is not supported here. Use Chrome or Edge.</span>
+    </div>
 
-        <circle id="zone1" cx="105" cy="135" r="20" fill="#484f58" />
-        <text class="label" x="90" y="100">Zone 1</text>
+    <div class="layout">
+      <div class="left-col">
+        <div class="panel">
+          <div class="btn-row">
+            <button class="btn primary" id="btnStart" disabled>Start test</button>
+            <button class="btn danger" id="btnStop" disabled>Stop</button>
+            <button class="btn" id="btnReset" disabled>Reset</button>
+          </div>
+          <button class="btn-felt" id="btnFelt" disabled>Patient felt it</button>
 
-        <circle id="zone2" cx="195" cy="135" r="20" fill="#484f58" />
-        <text class="label" x="210" y="100">Zone 2</text>
+          <div class="tiles">
+            <div class="tile"><div class="tile-label">Status</div><div class="tile-value" id="stStatus">&mdash;</div></div>
+            <div class="tile"><div class="tile-label">Testing zone</div><div class="tile-value" id="stZone">&mdash;</div></div>
+            <div class="tile"><div class="tile-label">Intensity</div><div class="tile-value" id="stIntensity">&mdash;</div></div>
+            <div class="tile"><div class="tile-label">Trial</div><div class="tile-value" id="stTrial">0</div></div>
+          </div>
+          <div class="timer"><div id="timerBar"></div></div>
+          <div class="timer-label">Response window</div>
+        </div>
 
-        <circle id="zone3" cx="150" cy="420" r="26" fill="#484f58" />
-        <text class="label" x="150" y="465">Heel</text>
-      </svg>
+        <div class="banner" id="doneBanner" hidden>
+          <span><b>Test complete.</b> Results are ready.</span>
+          <button class="btn primary" id="btnViewResults">View results</button>
+        </div>
 
-      <div class="legend">
-        <span><span class="dot" style="background: var(--green)"></span> Normal (&lt;10g)</span>
-        <span><span class="dot" style="background: var(--orange)"></span> Reduced (10-25g)</span>
-        <span><span class="dot" style="background: var(--red)"></span> Low (&gt;25g)</span>
+        <div class="zp-grid" id="zoneProgress"></div>
+
+        <div class="panel log-panel">
+          <div class="log-head"><span>Live readings</span><button class="btn ghost" id="btnClearLog" style="padding:4px 12px">Clear</button></div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+
+      <div class="right-col">
+        <div class="foot-panel">
+          <div class="foot-top">
+            <select class="footSel" aria-label="Foot side">
+              <option value="left">Left foot</option>
+              <option value="right">Right foot</option>
+            </select>
+          </div>
+          <div class="foot-canvas" id="foot-control"></div>
+          <div class="legend">
+            <span><span class="dot" style="background: var(--active)"></span> Testing now</span>
+            <span><span class="dot" style="background: #484f58"></span> Waiting</span>
+            <span><span class="dot" style="background: var(--green)"></span> Done (coloured by result)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS TAB ===================== -->
+  <section id="tab-results" hidden>
+    <div class="results-head">
+      <div>
+        <h2>Test results</h2>
+        <div class="source" id="sourceBadge"></div>
+      </div>
+      <div class="results-actions">
+        <button class="btn primary" id="btnCsv">Download CSV</button>
+        <button class="btn ghost" id="btnClearSaved">Clear saved results</button>
       </div>
     </div>
 
-    <div class="right-panel" id="cards">
-      <div class="empty-state">Waiting for data...</div>
-    </div>
-  </div>
+    <div class="layout">
+      <div class="left-col" id="cards"></div>
 
-  <div class="summary-panel" id="summary" style="display:none;">
-    <h2>Test Summary</h2>
-    <div class="summary-grid" id="summary-grid"></div>
-  </div>
+      <div class="right-col">
+        <div class="foot-panel">
+          <div class="foot-top">
+            <select class="footSel" aria-label="Foot side">
+              <option value="left">Left foot</option>
+              <option value="right">Right foot</option>
+            </select>
+          </div>
+          <div class="foot-canvas" id="foot-results"></div>
+          <div class="legend">
+            <span><span class="dot" style="background: var(--green)"></span> Normal (&lt;10g)</span>
+            <span><span class="dot" style="background: var(--orange)"></span> Reduced (10-25g)</span>
+            <span><span class="dot" style="background: var(--red)"></span> Low (&gt;25g)</span>
+          </div>
+          <div class="legend">
+            <span class="pip-legend"><span class="pip felt">&#10003;</span> Felt</span>
+            <span class="pip-legend"><span class="pip missed">&#10005;</span> Missed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel summary-panel" id="summary" hidden>
+      <h2>Test summary</h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+    </div>
+  </section>
+
+</div>
 
 <script>
-  const zoneNames = { 0: "Big Toe (Zone 0)", 1: "Ball Left (Zone 1)", 2: "Ball Right (Zone 2)", 3: "Heel (Zone 3)" };
+(() => {
+  const $ = id => document.getElementById(id);
+  const REVERSALS_NEEDED = 6;
+  const NEUTRAL = '#484f58';
+  const ZONE_NAMES = ['Big Toe (Zone 0)', 'Ball (Zone 1)', 'Ball (Zone 2)', 'Heel (Zone 3)'];
 
-  function colorFor(grams) {
-    if (grams < 10) return "green";
-    if (grams < 25) return "orange";
-    return "red";
+  // Foot drawn as a LEFT sole (big toe on the inner/right side); mirrored for the right foot.
+  const FOOT = {
+    sole: 'M150 470 C105 470 80 440 82 395 C84 350 98 310 96 270 C94 235 70 215 68 170 C66 120 90 100 130 96 ' +
+          'C175 92 215 92 232 120 C240 150 225 190 205 225 C185 255 170 285 175 320 C180 360 215 385 218 420 ' +
+          'C220 455 190 470 150 470 Z',
+    toes: [[198, 68, 28, 40], [148, 62, 17, 24], [113, 76, 15, 21], [84, 94, 13, 18], [62, 118, 11, 15]],
+    zones: [[198, 68, 20], [110, 175, 20], [190, 170, 20], [150, 415, 26]],
+    labels: [[198, 18, 'Big Toe'], [110, 213, 'Zone 1'], [190, 208, 'Zone 2'], [150, 457, 'Heel']]
+  };
+
+  const levelFor = g => g < 10 ? 'green' : g < 25 ? 'orange' : 'red';
+  const levelText = g => ({ green: 'Normal', orange: 'Reduced', red: 'Low' })[levelFor(g)];
+  const fmt1 = n => Number(n).toFixed(1);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  };
+
+  // ---------------------------------------------------------------- state
+  let side = store.get('dpn_foot') === 'right' ? 'right' : 'left';
+  let link = null;
+  let status = 'DISCONNECTED';
+  let live = newLive();
+  let results = null;
+
+  function newLive() {
+    return {
+      trialCount: 0,
+      current: { zone: null, intensity: null, firedAt: 0, waiting: false },
+      zones: [0, 1, 2, 3].map(() => ({ trials: [], reversals: 0, threshold: null }))
+    };
   }
 
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim();
+  // ---------------------------------------------------------------- foot drawing
+  function footMarkup(uid, colors, active, titles) {
+    const mx = x => side === 'left' ? x : 300 - x;
+    const flip = side === 'left' ? '' : ' transform="translate(300 0) scale(-1 1)"';
+    const shape = `<path d="${FOOT.sole}"/>` +
+      FOOT.toes.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}"/>`).join('');
+    const dots = FOOT.zones.map(([x, y, r], i) =>
+      `<circle class="zone-dot${active === i ? ' active' : ''}" cx="${mx(x)}" cy="${y}" r="${r}" ` +
+      `style="fill:${active === i ? 'var(--active)' : (colors[i] || NEUTRAL)}"><title>${titles[i] || ZONE_NAMES[i]}</title></circle>`
+    ).join('');
+    const labels = FOOT.labels.map(([x, y, t]) => `<text class="foot-label" x="${mx(x)}" y="${y}">${t}</text>`).join('');
+    return `<svg viewBox="0 0 300 500" role="img" aria-label="${side} foot sole">` +
+      `<defs><g id="sole-${uid}">${shape}</g></defs>` +
+      `<g${flip}><use href="#sole-${uid}" style="fill:var(--border);stroke:var(--border);stroke-width:8;stroke-linejoin:round"/>` +
+      `<use href="#sole-${uid}" style="fill:var(--sole)"/></g>${dots}${labels}</svg>`;
   }
 
-  async function loadData() {
-    const res = await fetch("latest_thresholds.json");
-    const data = await res.json();
-    const cardsContainer = document.getElementById("cards");
-    const summary = document.getElementById("summary");
-    const summaryGrid = document.getElementById("summary-grid");
+  function renderFoots() {
+    document.querySelectorAll('.footSel').forEach(s => { s.value = side; });
 
-    if (Object.keys(data).length === 0) {
-      cardsContainer.innerHTML = '<div class="empty-state">Waiting for data...</div>';
-      summary.style.display = "none";
-      return;
-    }
+    const cc = [], ct = [];
+    live.zones.forEach((z, i) => {
+      if (z.threshold) {
+        cc[i] = `var(--${levelFor(z.threshold.grams)})`;
+        ct[i] = `${ZONE_NAMES[i]}: ${fmt1(z.threshold.grams)} g`;
+      }
+    });
+    const activeZone = status === 'RUNNING' ? live.current.zone : null;
+    $('foot-control').innerHTML = footMarkup('c', cc, activeZone, ct);
 
-    let cardsHtml = "";
-    let totalTrials = 0;
-    let totalFelt = 0;
-    let allReactionTimes = [];
-    let worstZone = { name: "", grams: 0 };
-
-    for (let i = 0; i < 4; i++) {
-      const zone = data[i] || data[String(i)];
-      const circle = document.getElementById("zone" + i);
-      if (zone) {
-        const level = colorFor(zone.fsr_threshold_grams);
-        circle.setAttribute("fill", cssVar(level));
-
-        const badgeClass = "badge-" + level;
-        const levelLabel = zone.sensitivity_level || (level === "green" ? "Normal" : level === "orange" ? "Reduced" : "Low");
-
-        totalTrials += zone.total_trials || 0;
-        totalFelt += zone.felt_count || 0;
-        if (zone.avg_reaction_time_ms) allReactionTimes.push(zone.avg_reaction_time_ms);
-        if (zone.fsr_threshold_grams > worstZone.grams) {
-          worstZone = { name: zoneNames[i], grams: zone.fsr_threshold_grams };
+    const rc = [], rt = [];
+    if (results) {
+      for (let i = 0; i < 4; i++) {
+        const z = results.data[i] || results.data[String(i)];
+        if (z) {
+          rc[i] = `var(--${levelFor(Number(z.fsr_threshold_grams))})`;
+          rt[i] = `${ZONE_NAMES[i]}: ${fmt1(z.fsr_threshold_grams)} g`;
         }
-
-        let trialBar = "";
-        if (zone.trials && zone.trials.length > 0) {
-          trialBar = '<div class="trial-section-label">Trial history (green = felt, red = missed)</div><div class="trial-bar">';
-          zone.trials.forEach(t => {
-            const c = t.felt === "YES" ? cssVar("green") : cssVar("red");
-            trialBar += '<div class="trial-pip" style="background:' + c + '"></div>';
-          });
-          trialBar += '</div>';
-        }
-
-        cardsHtml += `
-          <div class="card" style="border-left-color: ${cssVar(level)}">
-            <div class="card-header">
-              <h3>${zoneNames[i]}</h3>
-              <span class="badge ${badgeClass}">${levelLabel}</span>
-            </div>
-            <div class="stats-grid">
-              <div class="stat">
-                <div class="stat-label">FSR Threshold</div>
-                <div class="stat-value large">${zone.fsr_threshold_grams}g</div>
-              </div>
-              <div class="stat">
-                <div class="stat-label">Intensity Threshold</div>
-                <div class="stat-value large">${zone.intensity_threshold}</div>
-              </div>
-              <div class="stat">
-                <div class="stat-label">Avg Reaction Time</div>
-                <div class="stat-value">${zone.avg_reaction_time_ms || '—'}ms</div>
-              </div>
-              <div class="stat">
-                <div class="stat-label">Trials (Felt / Missed)</div>
-                <div class="stat-value">${zone.felt_count || 0} / ${zone.missed_count || 0}</div>
-              </div>
-            </div>
-            ${trialBar}
-          </div>`;
       }
     }
-    cardsContainer.innerHTML = cardsHtml;
-
-    const avgRT = allReactionTimes.length > 0
-      ? (allReactionTimes.reduce((a, b) => a + b, 0) / allReactionTimes.length).toFixed(0)
-      : "—";
-
-    summaryGrid.innerHTML = `
-      <div class="summary-stat">
-        <div class="stat-label">Total Trials</div>
-        <div class="stat-value">${totalTrials}</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-label">Overall Felt Rate</div>
-        <div class="stat-value">${totalTrials > 0 ? Math.round(totalFelt / totalTrials * 100) : 0}%</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-label">Avg Reaction Time</div>
-        <div class="stat-value">${avgRT}ms</div>
-      </div>
-      <div class="summary-stat">
-        <div class="stat-label">Worst Zone</div>
-        <div class="stat-value" style="font-size:1rem">${worstZone.name}<br>${worstZone.grams}g</div>
-      </div>`;
-    summary.style.display = "block";
+    $('foot-results').innerHTML = footMarkup('r', rc, null, rt);
   }
 
-  loadData();
-  setInterval(loadData, 3000);
+  function setSide(v) {
+    side = v === 'right' ? 'right' : 'left';
+    store.set('dpn_foot', side);
+    renderFoots();
+  }
+
+  // ---------------------------------------------------------------- shared bits
+  function pips(trials) {
+    if (!trials.length) return '<span class="source">No trials yet</span>';
+    return '<div class="pips">' + trials.map((t, i) => {
+      const felt = t.felt === 'YES';
+      return `<span class="pip ${felt ? 'felt' : 'missed'}" title="Trial ${i + 1}: ${felt ? 'felt' : 'missed'} at intensity ${Number(t.intensity)}">${felt ? '&#10003;' : '&#10005;'}</span>`;
+    }).join('') + '</div>';
+  }
+
+  // ---------------------------------------------------------------- control tab render
+  function renderControl() {
+    const kind = link ? link.kind : null;
+    const pill = $('connPill');
+    pill.textContent = !link ? 'Disconnected' : kind === 'demo' ? 'Demo mode' : 'Connected';
+    pill.className = 'pill' + (link ? ' ok' : '');
+    $('btnConnect').textContent = kind === 'serial' ? 'Disconnect' : 'Connect to ESP32';
+    $('btnConnect').disabled = kind === 'demo';
+    $('demoToggle').checked = kind === 'demo';
+    $('demoToggle').disabled = kind === 'serial';
+    $('autoWrap').hidden = kind !== 'demo';
+
+    $('btnStart').textContent = status === 'STOPPED' ? 'Resume' : 'Start test';
+    $('btnStart').disabled = !(status === 'STANDBY' || status === 'STOPPED');
+    $('btnStop').disabled = status !== 'RUNNING';
+    $('btnReset').disabled = !link;
+    $('btnFelt').disabled = status !== 'RUNNING';
+
+    const st = $('stStatus');
+    st.textContent = status === 'DISCONNECTED' ? '—' : status;
+    st.className = 'tile-value st-' + status;
+    const c = live.current;
+    $('stZone').textContent = c.zone == null ? '—' : ZONE_NAMES[c.zone];
+    $('stIntensity').textContent = c.intensity == null ? '—' : c.intensity;
+    $('stTrial').textContent = live.trialCount;
+
+    $('doneBanner').hidden = status !== 'COMPLETE';
+
+    $('zoneProgress').innerHTML = live.zones.map((z, i) => {
+      const done = !!z.threshold || z.reversals >= REVERSALS_NEEDED;
+      const testing = status === 'RUNNING' && c.zone === i;
+      const badge = done ? '<span class="badge badge-done">Done</span>'
+        : testing ? '<span class="badge badge-active">Testing</span>'
+        : '<span class="badge badge-muted">Waiting</span>';
+      const segs = Array.from({ length: REVERSALS_NEEDED }, (_, k) => `<i class="${k < z.reversals ? 'on' : ''}"></i>`).join('');
+      const last = z.trials[z.trials.length - 1];
+      const meta = last
+        ? `Last intensity <b>${last.intensity}</b> &middot; FSR <b>${last.fsr_raw}</b> (${fmt1(last.fsr_grams)} g)`
+        : 'No readings yet';
+      return `<div class="zp"><div class="zp-head"><h4>${ZONE_NAMES[i]}</h4>${badge}</div>` +
+        `<div class="segs" title="Reversals ${z.reversals}/${REVERSALS_NEEDED}">${segs}</div>` +
+        `<div class="zp-meta">Reversals <b>${z.reversals}/${REVERSALS_NEEDED}</b><br>${meta}</div>${pips(z.trials)}</div>`;
+    }).join('');
+
+    renderFoots();
+  }
+
+  setInterval(() => {
+    const c = live.current;
+    let pct = 0;
+    if (link && status === 'RUNNING' && c.waiting) pct = Math.max(0, 1 - (performance.now() - c.firedAt) / link.responseTimeout);
+    $('timerBar').style.width = (pct * 100) + '%';
+  }, 80);
+
+  // ---------------------------------------------------------------- log
+  const logEl = $('log');
+  function classify(t) {
+    if (/^FIRE/.test(t)) return 'fire';
+    if (/^STATUS/.test(t)) return 'status';
+    if (/^ERR/.test(t)) return 'err';
+    if (/^Zone \d+ \||^---/.test(t)) return 'result';
+    return '';
+  }
+  function logLine(text, kind) {
+    const d = document.createElement('div');
+    d.className = 'ln ' + (kind || classify(text));
+    d.textContent = text;
+    const near = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 30;
+    logEl.appendChild(d);
+    while (logEl.childElementCount > 400) logEl.removeChild(logEl.firstChild);
+    if (near) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ---------------------------------------------------------------- device protocol
+  const TRIAL_RE = /^Zone: (\d+) \| Felt: (YES|NO) \| Intensity: (\d+) \| Reversals: (\d+)(?:\/\d+)? \| FSR raw: (\d+) \| FSR grams: ([\d.]+) \| Reaction time \(ms\): (\d+)/;
+  const FIRE_RE = /^FIRE: Zone (\d+) \| Intensity: (\d+) \| Trial: (\d+)/;
+  const THRESH_RE = /^Zone (\d+) \| Intensity threshold: ([\d.]+) \| FSR threshold: ([\d.]+)g/;
+  const STATUS_RE = /^STATUS: (\w+)/;
+
+  function handleLine(raw) {
+    const line = raw.trim();
+    if (!line) return;
+    logLine(line);
+    let m;
+    if ((m = line.match(STATUS_RE))) {
+      if (m[1] === 'RESET') { live = newLive(); }
+      else {
+        status = m[1];
+        if (status !== 'RUNNING') live.current.waiting = false;
+        if (status === 'COMPLETE') finalizeResults();
+      }
+    } else if ((m = line.match(FIRE_RE))) {
+      live.current = { zone: +m[1], intensity: +m[2], firedAt: performance.now(), waiting: true };
+      live.trialCount = +m[3];
+    } else if ((m = line.match(TRIAL_RE))) {
+      const z = live.zones[+m[1]];
+      if (z) {
+        z.trials.push({ felt: m[2], intensity: +m[3], reversals: +m[4], fsr_raw: +m[5], fsr_grams: +m[6], reaction_time_ms: +m[7] });
+        z.reversals = +m[4];
+      }
+      live.current.waiting = false;
+    } else if ((m = line.match(THRESH_RE))) {
+      const z = live.zones[+m[1]];
+      if (z) z.threshold = { intensity: +m[2], grams: +m[3] };
+    }
+    renderControl();
+  }
+
+  function send(cmd) {
+    if (!link) return;
+    logLine('> ' + cmd, 'tx');
+    link.send(cmd);
+  }
+
+  // ---------------------------------------------------------------- results
+  function buildData() {
+    const out = {};
+    live.zones.forEach((z, i) => {
+      const felt = z.trials.filter(t => t.felt === 'YES');
+      const rts = felt.map(t => t.reaction_time_ms);
+      out[i] = {
+        intensity_threshold: z.threshold.intensity,
+        fsr_threshold_grams: z.threshold.grams,
+        avg_reaction_time_ms: rts.length ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length * 10) / 10 : 0,
+        total_trials: z.trials.length,
+        felt_count: felt.length,
+        missed_count: z.trials.length - felt.length,
+        sensitivity_level: levelText(z.threshold.grams),
+        trials: z.trials.map(t => ({ felt: t.felt, intensity: t.intensity, fsr_raw: t.fsr_raw, fsr_grams: t.fsr_grams, reaction_time_ms: t.reaction_time_ms, reversals: t.reversals }))
+      };
+    });
+    return out;
+  }
+
+  function finalizeResults() {
+    if (live.zones.some(z => !z.threshold)) return;
+    results = { source: link && link.kind === 'demo' ? 'demo' : 'live', savedAt: new Date().toISOString(), data: buildData() };
+    store.set('dpn_results', JSON.stringify(results));
+    renderResults();
+  }
+
+  async function loadResults() {
+    const saved = store.get('dpn_results');
+    if (saved) {
+      try {
+        const r = JSON.parse(saved);
+        if (r && r.data) { results = r; return; }
+      } catch (e) {}
+    }
+    try {
+      const res = await fetch('latest_thresholds.json', { cache: 'no-store' });
+      const data = await res.json();
+      if (data && Object.keys(data).length) results = { source: 'sample', savedAt: null, data };
+    } catch (e) {}
+  }
+
+  function renderResults() {
+    const cards = $('cards');
+    const summary = $('summary');
+    const badge = $('sourceBadge');
+
+    if (!results) {
+      cards.innerHTML = '<div class="empty-state">No results yet. Run a test from the Control tab.</div>';
+      summary.hidden = true;
+      badge.textContent = '';
+      $('btnCsv').disabled = true;
+      renderFoots();
+      return;
+    }
+    $('btnCsv').disabled = false;
+
+    const when = results.savedAt ? new Date(results.savedAt).toLocaleString() : '';
+    badge.textContent = results.source === 'sample' ? 'Sample data — replaced automatically when a test finishes'
+      : results.source === 'demo' ? 'Demo simulation · ' + when
+      : 'Live test · ' + when;
+
+    let html = '', totalTrials = 0, totalFelt = 0, rts = [], worst = { name: '', g: -1 };
+    for (let i = 0; i < 4; i++) {
+      const z = results.data[i] || results.data[String(i)];
+      if (!z) continue;
+      const g = Number(z.fsr_threshold_grams);
+      const level = levelFor(g);
+      totalTrials += Number(z.total_trials) || 0;
+      totalFelt += Number(z.felt_count) || 0;
+      if (Number(z.avg_reaction_time_ms)) rts.push(Number(z.avg_reaction_time_ms));
+      if (g > worst.g) worst = { name: ZONE_NAMES[i], g };
+      html += `
+        <div class="card" style="border-left-color: var(--${level})">
+          <div class="card-header">
+            <h3>${ZONE_NAMES[i]}</h3>
+            <span class="badge badge-${level}">${levelText(g)}</span>
+          </div>
+          <div class="stats-grid">
+            <div class="stat"><div class="stat-label">FSR threshold</div><div class="stat-value large">${fmt1(g)}g</div></div>
+            <div class="stat"><div class="stat-label">Intensity threshold</div><div class="stat-value large">${fmt1(z.intensity_threshold)}</div></div>
+            <div class="stat"><div class="stat-label">Avg reaction time</div><div class="stat-value">${Number(z.avg_reaction_time_ms) ? Number(z.avg_reaction_time_ms) + 'ms' : '—'}</div></div>
+            <div class="stat"><div class="stat-label">Trial history</div>${pips(z.trials || [])}</div>
+          </div>
+        </div>`;
+    }
+    cards.innerHTML = html;
+
+    const avgRT = rts.length ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : null;
+    $('summaryGrid').innerHTML = `
+      <div class="summary-stat"><div class="stat-label">Total trials</div><div class="stat-value">${totalTrials}</div></div>
+      <div class="summary-stat"><div class="stat-label">Overall felt rate</div><div class="stat-value">${totalTrials ? Math.round(totalFelt / totalTrials * 100) : 0}%</div></div>
+      <div class="summary-stat"><div class="stat-label">Avg reaction time</div><div class="stat-value">${avgRT == null ? '—' : avgRT + 'ms'}</div></div>
+      <div class="summary-stat"><div class="stat-label">Least sensitive zone</div><div class="stat-value" style="font-size:1rem">${worst.name}<br>${fmt1(worst.g)}g</div></div>`;
+    summary.hidden = false;
+    renderFoots();
+  }
+
+  // ---------------------------------------------------------------- CSV
+  const csvCell = v => {
+    const s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+
+  function downloadCsv() {
+    if (!results) return;
+    const rows = [['zone', 'zone_name', 'trial_no', 'felt', 'intensity', 'fsr_raw', 'fsr_grams', 'reaction_time_ms',
+      'reversals_after_trial', 'zone_intensity_threshold', 'zone_fsr_threshold_g', 'zone_sensitivity', 'data_source']];
+    for (let i = 0; i < 4; i++) {
+      const z = results.data[i] || results.data[String(i)];
+      if (!z) continue;
+      const g = Number(z.fsr_threshold_grams);
+      const tail = [z.intensity_threshold, g, levelText(g), results.source];
+      const trials = z.trials || [];
+      if (!trials.length) rows.push([i, ZONE_NAMES[i], '', '', '', '', '', '', '', ...tail]);
+      trials.forEach((t, k) => rows.push([i, ZONE_NAMES[i], k + 1, t.felt, t.intensity, t.fsr_raw, t.fsr_grams,
+        t.felt === 'YES' ? t.reaction_time_ms : '', t.reversals, ...tail]));
+    }
+    const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    const name = `dpn_results_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ---------------------------------------------------------------- serial link (Web Serial)
+  function makeSerialLink(port) {
+    const enc = new TextEncoder();
+    const writer = port.writable.getWriter();
+    const reader = port.readable.getReader();
+    let closed = false;
+    const loop = (async () => {
+      const dec = new TextDecoder();
+      let buf = '';
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) { handleLine(buf.slice(0, i)); buf = buf.slice(i + 1); }
+        }
+      } catch (e) {}
+      try { reader.releaseLock(); } catch (e) {}
+      if (!closed) disconnect(true);
+    })();
+    return {
+      kind: 'serial',
+      responseTimeout: 3000,
+      send: cmd => writer.write(enc.encode(cmd + '\n')).catch(() => {}),
+      async close() {
+        closed = true;
+        try { await reader.cancel(); } catch (e) {}
+        await loop;
+        try { writer.releaseLock(); } catch (e) {}
+        try { await port.close(); } catch (e) {}
+      }
+    };
+  }
+
+  async function connectSerial() {
+    if (!('serial' in navigator)) { $('browserWarn').hidden = false; return; }
+    try {
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 115200 });
+      live = newLive();
+      link = makeSerialLink(port);
+      status = 'STANDBY';
+      renderControl();
+      send('STATUS');
+      setTimeout(() => { if (link && link.kind === 'serial') send('STATUS'); }, 2000);
+    } catch (e) {
+      logLine('Could not open the port: ' + (e && e.message ? e.message : e), 'err');
+    }
+  }
+
+  async function disconnect(lost) {
+    const l = link;
+    link = null;
+    status = 'DISCONNECTED';
+    live.current.waiting = false;
+    if (l) await l.close();
+    if (lost) logLine('Connection lost.', 'err');
+    renderControl();
+  }
+
+  // ---------------------------------------------------------------- demo device (same protocol as the firmware)
+  function createSim(emit) {
+    const TRUE_THR = [90, 150, 120, 190];
+    const FSR_BASE = [580, 1300, 780, 2050];
+    const CAL_RAW = [0, 300, 600, 1400, 2800];
+    const CAL_G = [0, 5, 10, 20, 50];
+    const toGrams = raw => {
+      if (raw <= CAL_RAW[0]) return CAL_G[0];
+      if (raw >= CAL_RAW[4]) return CAL_G[4];
+      for (let i = 0; i < 4; i++) {
+        if (raw >= CAL_RAW[i] && raw <= CAL_RAW[i + 1]) {
+          return CAL_G[i] + (raw - CAL_RAW[i]) / (CAL_RAW[i + 1] - CAL_RAW[i]) * (CAL_G[i + 1] - CAL_G[i]);
+        }
+      }
+      return 0;
+    };
+
+    const sim = { auto: true, responseTimeout: 1500 };
+    let state = 'STANDBY', paused = false, zones, trial = 0, last = -1, cur = null, timers = [];
+    const later = (fn, ms) => { const t = setTimeout(() => { timers = timers.filter(x => x !== t); fn(); }, ms); timers.push(t); };
+    const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+    const resetZones = () => {
+      zones = Array.from({ length: 4 }, () => ({ intensity: 200, dir: 0, rev: 0, active: true, revInt: [], revFsr: [] }));
+      trial = 0; last = -1; cur = null;
+    };
+    const sendStatus = () => emit(state === 'DONE' ? 'STATUS: COMPLETE' : state === 'STANDBY' ? (paused ? 'STATUS: STOPPED' : 'STATUS: STANDBY') : 'STATUS: RUNNING');
+
+    function next() {
+      const active = zones.map((z, i) => z.active ? i : -1).filter(i => i >= 0);
+      if (!active.length) return finish();
+      const pool = active.length > 1 ? active.filter(i => i !== last) : active;
+      const z = pool[Math.floor(Math.random() * pool.length)];
+      last = z; trial++;
+      cur = { z, intensity: zones[z].intensity, t0: performance.now(), done: false };
+      emit(`FIRE: Zone ${z} | Intensity: ${cur.intensity} | Trial: ${trial}`);
+      if (sim.auto && cur.intensity >= TRUE_THR[z] + (Math.random() * 30 - 15)) {
+        later(() => respond(true), 350 + Math.random() * 550);
+      }
+      later(() => respond(false), sim.responseTimeout);
+    }
+
+    function respond(felt) {
+      if (!cur || cur.done) return;
+      cur.done = true;
+      clearTimers();
+      const zn = zones[cur.z];
+      const rt = felt ? Math.round(performance.now() - cur.t0) : 0;
+      const raw = Math.round(FSR_BASE[cur.z] + (Math.random() * 50 - 25));
+      const dir = felt ? -1 : 1;
+      if (zn.dir !== 0 && dir !== zn.dir && zn.rev < REVERSALS_NEEDED) {
+        zn.revInt.push(cur.intensity); zn.revFsr.push(raw); zn.rev++;
+        if (zn.rev >= REVERSALS_NEEDED) zn.active = false;
+      }
+      zn.dir = dir;
+      zn.intensity = Math.min(255, Math.max(0, zn.intensity + (felt ? -20 : 20)));
+      emit(`Zone: ${cur.z} | Felt: ${felt ? 'YES' : 'NO'} | Intensity: ${cur.intensity} | Reversals: ${zn.rev} | FSR raw: ${raw} | FSR grams: ${toGrams(raw).toFixed(1)} | Reaction time (ms): ${rt}`);
+      later(next, 500);
+    }
+
+    function finish() {
+      emit('--- TEST COMPLETE ---');
+      const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+      zones.forEach((zn, i) => {
+        emit(`Zone ${i} | Intensity threshold: ${avg(zn.revInt).toFixed(1)} | FSR threshold: ${toGrams(Math.trunc(avg(zn.revFsr))).toFixed(1)}g`);
+      });
+      state = 'DONE';
+      sendStatus();
+    }
+
+    sim.send = raw => {
+      const cmd = raw.trim().toUpperCase();
+      if (cmd === 'START') {
+        if (state === 'STANDBY') { paused = false; state = 'RUNNING'; sendStatus(); later(next, 400); }
+        else if (state === 'DONE') emit('ERR: Test complete - press RESET first');
+      } else if (cmd === 'STOP') {
+        if (state === 'RUNNING') { clearTimers(); cur = null; paused = true; state = 'STANDBY'; sendStatus(); }
+      } else if (cmd === 'RESET') {
+        clearTimers(); resetZones(); paused = false; state = 'STANDBY';
+        emit('STATUS: RESET'); sendStatus();
+      } else if (cmd === 'FELT') {
+        if (state === 'RUNNING') respond(true);
+      } else if (cmd === 'STATUS') sendStatus();
+    };
+    sim.close = clearTimers;
+    resetZones();
+    return sim;
+  }
+
+  function connectDemo() {
+    const sim = createSim(handleLine);
+    sim.auto = $('autoRespond').checked;
+    live = newLive();
+    link = { kind: 'demo', responseTimeout: sim.responseTimeout, sim, send: c => sim.send(c), close: () => sim.close() };
+    status = 'STANDBY';
+    renderControl();
+    send('STATUS');
+  }
+
+  // ---------------------------------------------------------------- wiring
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    $('tab-control').hidden = name !== 'control';
+    $('tab-results').hidden = name !== 'results';
+  }
+
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  document.querySelectorAll('.footSel').forEach(s => s.addEventListener('change', e => setSide(e.target.value)));
+
+  $('btnConnect').addEventListener('click', () => { link && link.kind === 'serial' ? disconnect(false) : connectSerial(); });
+  $('demoToggle').addEventListener('change', e => { e.target.checked ? connectDemo() : disconnect(false); });
+  $('autoRespond').addEventListener('change', e => { if (link && link.sim) link.sim.auto = e.target.checked; });
+  $('btnStart').addEventListener('click', () => send('START'));
+  $('btnStop').addEventListener('click', () => send('STOP'));
+  $('btnReset').addEventListener('click', () => send('RESET'));
+  $('btnFelt').addEventListener('click', () => send('FELT'));
+  $('btnClearLog').addEventListener('click', () => { logEl.innerHTML = ''; });
+  $('btnViewResults').addEventListener('click', () => switchTab('results'));
+  $('btnCsv').addEventListener('click', downloadCsv);
+  $('btnClearSaved').addEventListener('click', async () => {
+    store.del('dpn_results');
+    results = null;
+    await loadResults();
+    renderResults();
+  });
+
+  if (!('serial' in navigator)) $('browserWarn').hidden = false;
+
+  renderControl();
+  loadResults().then(renderResults);
+})();
 </script>
 </body>
 </html>

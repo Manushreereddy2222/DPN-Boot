@@ -59,14 +59,18 @@ public:
     return sumFSR(head) / (float)count;
   }
 
-  ~TrialList() {
+  void clear() {
     TrialNode* curr = head;
     while (curr) {
       TrialNode* tmp = curr;
       curr = curr->next;
       delete tmp;
     }
+    head = nullptr;
+    count = 0;
   }
+
+  ~TrialList() { clear(); }
 };
 
 // ===================== BASE CLASS (Inheritance) =====================
@@ -162,6 +166,15 @@ public:
     motor = m;
   }
 
+  void reset() {
+    intensity = START_INTENSITY;
+    lastDirection = 0;
+    reversalCount = 0;
+    active = true;
+    reversals.clear();
+    motor->stop();
+  }
+
   bool isActive() { return active; }
   int getId() { return id; }
   int getIntensity() { return intensity; }
@@ -254,21 +267,85 @@ Zone zones[NUM_ZONES];
 Button responseBtn(23, "Response");
 Button powerBtn(27, "Power");
 
-enum TestState { IDLE, FIRE, WAIT_RESPONSE, LOG_RESULT, TEST_COMPLETE };
-TestState currentState = IDLE;
+enum TestState { STANDBY, IDLE, FIRE, WAIT_RESPONSE, LOG_RESULT, TEST_COMPLETE, DONE };
+TestState currentState = STANDBY;
 
 int currentZone = -1;
 int lastZone = -1;
+int trialCount = 0;
 unsigned long stateStartTime = 0;
 unsigned long responseTimestamp = 0;
 bool responseReceived = false;
+bool feltCommand = false;
+bool paused = false;
 bool systemOn = true;
 unsigned long powerPressStart = 0;
 bool powerHandled = false;
+String cmdBuffer = "";
 
 void output(String msg) {
   Serial.println(msg);
   SerialBT.println(msg);
+}
+
+void sendStatus() {
+  if (currentState == DONE) output("STATUS: COMPLETE");
+  else if (currentState == STANDBY) output(paused ? "STATUS: STOPPED" : "STATUS: STANDBY");
+  else output("STATUS: RUNNING");
+}
+
+void startTest() {
+  if (currentState == STANDBY) {
+    paused = false;
+    currentState = IDLE;
+    sendStatus();
+  } else if (currentState == DONE) {
+    output("ERR: Test complete - press RESET first");
+  }
+}
+
+void stopTest() {
+  if (currentState == STANDBY || currentState == DONE) return;
+  for (int i = 0; i < NUM_ZONES; i++) motors[i].stop();
+  paused = true;
+  currentState = STANDBY;
+  sendStatus();
+}
+
+void resetTest() {
+  for (int i = 0; i < NUM_ZONES; i++) zones[i].reset();
+  currentZone = -1;
+  lastZone = -1;
+  trialCount = 0;
+  feltCommand = false;
+  paused = false;
+  currentState = STANDBY;
+  output("STATUS: RESET");
+  sendStatus();
+}
+
+void handleCommand(String cmd) {
+  cmd.trim();
+  cmd.toUpperCase();
+  if (cmd == "START") startTest();
+  else if (cmd == "STOP") stopTest();
+  else if (cmd == "RESET") resetTest();
+  else if (cmd == "FELT") { if (currentState == WAIT_RESPONSE) feltCommand = true; }
+  else if (cmd == "STATUS") sendStatus();
+}
+
+void readCommandChar(char c) {
+  if (c == '\n' || c == '\r') {
+    if (cmdBuffer.length() > 0) handleCommand(cmdBuffer);
+    cmdBuffer = "";
+  } else if (cmdBuffer.length() < 32) {
+    cmdBuffer += c;
+  }
+}
+
+void pollCommands() {
+  while (Serial.available()) readCommandChar((char)Serial.read());
+  while (SerialBT.available()) readCommandChar((char)SerialBT.read());
 }
 
 void checkPower() {
@@ -303,26 +380,34 @@ void setup() {
   powerBtn.init();
 
   randomSeed(analogRead(0));
+  sendStatus();
 }
 
 void loop() {
+  pollCommands();
   checkPower();
   if (!systemOn) return;
 
   switch (currentState) {
 
+    case STANDBY: {
+      if (!paused && responseBtn.pressed()) startTest();
+      break;
+    }
+
     case IDLE: {
-      bool anyActive = false;
-      for (int i = 0; i < NUM_ZONES; i++) if (zones[i].isActive()) anyActive = true;
-      if (!anyActive) { currentState = TEST_COMPLETE; break; }
+      int activeCount = 0;
+      for (int i = 0; i < NUM_ZONES; i++) if (zones[i].isActive()) activeCount++;
+      if (activeCount == 0) { currentState = TEST_COMPLETE; break; }
 
-      int newZone;
-      do {
-        newZone = random(0, NUM_ZONES);
-      } while (newZone == lastZone || !zones[newZone].isActive());
+      int candidates[NUM_ZONES];
+      int n = 0;
+      for (int i = 0; i < NUM_ZONES; i++) {
+        if (zones[i].isActive() && (i != lastZone || activeCount == 1)) candidates[n++] = i;
+      }
 
-      currentZone = newZone;
-      lastZone = newZone;
+      currentZone = candidates[random(0, n)];
+      lastZone = currentZone;
       currentState = FIRE;
       break;
     }
@@ -331,6 +416,11 @@ void loop() {
       zones[currentZone].fire();
       stateStartTime = millis();
       responseReceived = false;
+      feltCommand = false;
+      trialCount++;
+      output("FIRE: Zone " + String(currentZone) +
+             " | Intensity: " + String(zones[currentZone].getIntensity()) +
+             " | Trial: " + String(trialCount));
       currentState = WAIT_RESPONSE;
       break;
     }
@@ -340,7 +430,7 @@ void loop() {
         zones[currentZone].stopMotor();
       }
 
-      if (responseBtn.pressed() && !responseReceived) {
+      if ((responseBtn.pressed() || feltCommand) && !responseReceived) {
         responseReceived = true;
         responseTimestamp = millis();
         currentState = LOG_RESULT;
@@ -357,11 +447,12 @@ void loop() {
       float fsrGrams = sensor->rawToGrams(fsrValue);
       unsigned long reactionTime = responseReceived ? (responseTimestamp - stateStartTime) : 0;
 
+      int testedIntensity = zones[currentZone].getIntensity();
       zones[currentZone].processResult(responseReceived, fsrValue);
 
       String line = "Zone: " + String(currentZone) +
                     " | Felt: " + (responseReceived ? "YES" : "NO") +
-                    " | Intensity: " + String(zones[currentZone].getIntensity()) +
+                    " | Intensity: " + String(testedIntensity) +
                     " | Reversals: " + String(zones[currentZone].getReversalCount()) +
                     " | FSR raw: " + String(fsrValue) +
                     " | FSR grams: " + String(fsrGrams, 1) +
@@ -388,7 +479,12 @@ void loop() {
         output(result);
       }
 
-      while (true) delay(1000);
+      currentState = DONE;
+      sendStatus();
+      break;
+    }
+
+    case DONE: {
       break;
     }
   }
