@@ -1,12 +1,18 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, send_from_directory
 import json, os
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+THRESHOLDS_FILE = os.path.join(BASE_DIR, "latest_thresholds.json")
+
 app = Flask(__name__)
-THRESHOLDS_FILE = "latest_thresholds.json"
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return send_from_directory(BASE_DIR, "index.html")
+
+@app.route("/latest_thresholds.json")
+def thresholds_file():
+    return send_from_directory(BASE_DIR, "latest_thresholds.json")
 
 @app.route("/api/thresholds")
 def get_thresholds():
