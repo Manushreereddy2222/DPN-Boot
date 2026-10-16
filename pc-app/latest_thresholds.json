@@ -55,26 +55,5 @@
       {"felt": "NO", "intensity": 128, "fsr_raw": 810, "fsr_grams": 12.6, "reaction_time_ms": 0, "reversals": 3},
       {"felt": "YES", "intensity": 88, "fsr_raw": 760, "fsr_grams": 12.0, "reaction_time_ms": 400, "reversals": 3}
     ]
-  },
-  "3": {
-    "intensity_threshold": 194.7,
-    "fsr_threshold_grams": 32.8,
-    "avg_reaction_time_ms": 612.5,
-    "total_trials": 10,
-    "felt_count": 5,
-    "missed_count": 5,
-    "sensitivity_level": "Low",
-    "trials": [
-      {"felt": "NO", "intensity": 168, "fsr_raw": 2100, "fsr_grams": 33.6, "reaction_time_ms": 0, "reversals": 0},
-      {"felt": "NO", "intensity": 208, "fsr_raw": 2150, "fsr_grams": 34.5, "reaction_time_ms": 0, "reversals": 0},
-      {"felt": "YES", "intensity": 168, "fsr_raw": 2050, "fsr_grams": 32.7, "reaction_time_ms": 598, "reversals": 1},
-      {"felt": "NO", "intensity": 208, "fsr_raw": 2120, "fsr_grams": 33.9, "reaction_time_ms": 0, "reversals": 1},
-      {"felt": "YES", "intensity": 168, "fsr_raw": 2040, "fsr_grams": 32.5, "reaction_time_ms": 625, "reversals": 2},
-      {"felt": "YES", "intensity": 128, "fsr_raw": 2000, "fsr_grams": 31.4, "reaction_time_ms": 645, "reversals": 2},
-      {"felt": "NO", "intensity": 168, "fsr_raw": 2080, "fsr_grams": 33.1, "reaction_time_ms": 0, "reversals": 2},
-      {"felt": "NO", "intensity": 208, "fsr_raw": 2130, "fsr_grams": 34.1, "reaction_time_ms": 0, "reversals": 2},
-      {"felt": "YES", "intensity": 168, "fsr_raw": 2060, "fsr_grams": 32.9, "reaction_time_ms": 580, "reversals": 3},
-      {"felt": "YES", "intensity": 128, "fsr_raw": 2010, "fsr_grams": 31.6, "reaction_time_ms": 614, "reversals": 3}
-    ]
   }
 }

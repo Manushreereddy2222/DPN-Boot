@@ -335,8 +335,9 @@
 (() => {
   const $ = id => document.getElementById(id);
   const REVERSALS_NEEDED = 6;
+  const NUM_ZONES = 3;
   const NEUTRAL = '#484f58';
-  const ZONE_NAMES = ['Big Toe (Zone 0)', 'Ball (Zone 1)', 'Ball (Zone 2)', 'Heel (Zone 3)'];
+  const ZONE_NAMES = ['Big Toe (Zone 0)', 'Ball (Zone 1)', 'Ball (Zone 2)'];
 
   // Foot drawn as a LEFT sole (big toe on the inner/right side); mirrored for the right foot.
   const FOOT = {
@@ -344,8 +345,8 @@
           'C175 92 215 92 232 120 C240 150 225 190 205 225 C185 255 170 285 175 320 C180 360 215 385 218 420 ' +
           'C220 455 190 470 150 470 Z',
     toes: [[198, 68, 28, 40], [148, 62, 17, 24], [113, 76, 15, 21], [84, 94, 13, 18], [62, 118, 11, 15]],
-    zones: [[198, 68, 20], [110, 175, 20], [190, 170, 20], [150, 415, 26]],
-    labels: [[198, 18, 'Big Toe'], [110, 213, 'Zone 1'], [190, 208, 'Zone 2'], [150, 457, 'Heel']]
+    zones: [[198, 68, 20], [110, 175, 20], [190, 170, 20]],
+    labels: [[198, 18, 'Big Toe'], [110, 213, 'Zone 1'], [190, 208, 'Zone 2']]
   };
 
   const levelFor = g => g < 10 ? 'green' : g < 25 ? 'orange' : 'red';
@@ -368,7 +369,7 @@
     return {
       trialCount: 0,
       current: { zone: null, intensity: null, firedAt: 0, waiting: false },
-      zones: [0, 1, 2, 3].map(() => ({ trials: [], reversals: 0, threshold: null }))
+      zones: Array.from({ length: NUM_ZONES }, () => ({ trials: [], reversals: 0, threshold: null }))
     };
   }
 
@@ -404,7 +405,7 @@
 
     const rc = [], rt = [];
     if (results) {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < NUM_ZONES; i++) {
         const z = results.data[i] || results.data[String(i)];
         if (z) {
           rc[i] = `var(--${levelFor(Number(z.fsr_threshold_grams))})`;
@@ -607,7 +608,7 @@
       : 'Live test · ' + when;
 
     let html = '', totalTrials = 0, totalFelt = 0, rts = [], worst = { name: '', g: -1 };
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < NUM_ZONES; i++) {
       const z = results.data[i] || results.data[String(i)];
       if (!z) continue;
       const g = Number(z.fsr_threshold_grams);
@@ -652,7 +653,7 @@
     if (!results) return;
     const rows = [['zone', 'zone_name', 'trial_no', 'felt', 'intensity', 'fsr_raw', 'fsr_grams', 'reaction_time_ms',
       'reversals_after_trial', 'zone_intensity_threshold', 'zone_fsr_threshold_g', 'zone_sensitivity', 'data_source']];
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < NUM_ZONES; i++) {
       const z = results.data[i] || results.data[String(i)];
       if (!z) continue;
       const g = Number(z.fsr_threshold_grams);
@@ -735,8 +736,8 @@
 
   // ---------------------------------------------------------------- demo device (same protocol as the firmware)
   function createSim(emit) {
-    const TRUE_THR = [90, 150, 120, 190];
-    const FSR_BASE = [580, 1300, 780, 2050];
+    const TRUE_THR = [90, 150, 120];
+    const FSR_BASE = [580, 1300, 780];
     const CAL_RAW = [0, 300, 600, 1400, 2800];
     const CAL_G = [0, 5, 10, 20, 50];
     const toGrams = raw => {
@@ -755,7 +756,7 @@
     const later = (fn, ms) => { const t = setTimeout(() => { timers = timers.filter(x => x !== t); fn(); }, ms); timers.push(t); };
     const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
     const resetZones = () => {
-      zones = Array.from({ length: 4 }, () => ({ intensity: 200, dir: 0, rev: 0, active: true, revInt: [], revFsr: [] }));
+      zones = Array.from({ length: NUM_ZONES }, () => ({ intensity: 200, dir: 0, rev: 0, active: true, revInt: [], revFsr: [] }));
       trial = 0; last = -1; cur = null;
     };
     const sendStatus = () => emit(state === 'DONE' ? 'STATUS: COMPLETE' : state === 'STANDBY' ? (paused ? 'STATUS: STOPPED' : 'STATUS: STANDBY') : 'STATUS: RUNNING');

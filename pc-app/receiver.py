@@ -8,6 +8,7 @@ PORT = "COM5"  # TODO: replace with your ESP32's paired Bluetooth COM port
 BAUD = 115200
 CSV_FILE = "dpn_test_results.csv"
 THRESHOLDS_FILE = "latest_thresholds.json"
+NUM_ZONES = 3
 
 threshold_pattern = re.compile(
     r"Zone (\d+) \| Intensity threshold: ([\d.]+) \| FSR threshold: ([\d.]+)g"
@@ -91,7 +92,7 @@ def main():
                     "sensitivity_level": "Normal" if float(fsr_th) < 10 else ("Reduced" if float(fsr_th) < 25 else "Low"),
                     "trials": zone_trials
                 }
-                if len(thresholds) == 4:
+                if len(thresholds) == NUM_ZONES:
                     with open(THRESHOLDS_FILE, "w") as jf:
                         json.dump(thresholds, jf, indent=2)
                     print("Saved final thresholds:", json.dumps(thresholds, indent=2))
