@@ -248,19 +248,17 @@ public:
 };
 
 // ===================== GLOBALS =====================
-#define NUM_ZONES 4
+#define NUM_ZONES 3
 #define POKE_DURATION 200
 #define RESPONSE_TIMEOUT 3000
 #define LONG_PRESS_DURATION 3000
 
 FSRSensor sensors[NUM_ZONES] = {
-  FSRSensor(34, "FSR_0"), FSRSensor(35, "FSR_1"),
-  FSRSensor(36, "FSR_2"), FSRSensor(39, "FSR_3")
+  FSRSensor(34, "FSR_0"), FSRSensor(35, "FSR_1"), FSRSensor(36, "FSR_2")
 };
 
 MotorActuator motors[NUM_ZONES] = {
-  MotorActuator(0, 0, "Motor_0"), MotorActuator(1, 1, "Motor_1"),
-  MotorActuator(2, 2, "Motor_2"), MotorActuator(3, 3, "Motor_3")
+  MotorActuator(0, 0, "Motor_0"), MotorActuator(1, 1, "Motor_1"), MotorActuator(2, 2, "Motor_2")
 };
 
 Zone zones[NUM_ZONES];
